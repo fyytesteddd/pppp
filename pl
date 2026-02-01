@@ -8828,7 +8828,7 @@ task.spawn(function()
                             Title = "Auto-Load Position Failed",
                             Content = "HumanoidRootPart not found!",
                             Duration = 3,
-                            Icon = "alert-circle"
+                            Icon = "circle-alert"
                         })
                     end
                 else
@@ -8836,7 +8836,7 @@ task.spawn(function()
                         Title = "Auto-Load Position Failed",
                         Content = "Character not loaded yet!",
                         Duration = 3,
-                        Icon = "alert-circle"
+                        Icon = "circle-alert"
                     })
                 end
             end
