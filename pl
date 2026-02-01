@@ -89,7 +89,11 @@ local function LoadConfig(name)
     end
     
     -- Debug notification
-    print(string.format("[Config] Loaded %d/%d items (%d failed) from '%s'", loadedCount, loadedCount + failedCount, failedCount, name))
+    WindUI:Notify({
+        Title = "Config Loaded",
+        Content = string.format("%d/%d items loaded (%d failed)", loadedCount, loadedCount + failedCount, failedCount),
+        Duration = 3
+    })
 end
 
 local function SetAutoLoad(name)
@@ -105,14 +109,14 @@ end
 
 local function LoadAutoConfig()
     local name = GetAutoLoad()
-    print("[Config] Auto-load check: " .. (name or "none"))
+    WindUI:Notify({Title = "Auto-Load Check", Content = name or "No auto-load set", Duration = 2})
     if name and isfile(ConfigFolder .. "/" .. name .. ".json") then
-        print("[Config] Auto-loading config: " .. name)
+        WindUI:Notify({Title = "Auto-Loading", Content = "Loading: " .. name, Duration = 2})
         LoadConfig(name)
         return name
     else
         if name then
-            print("[Config] Auto-load file not found: " .. name)
+            WindUI:Notify({Title = "Auto-Load Error", Content = "File not found: " .. name, Duration = 3})
         end
     end
     return nil
@@ -8780,13 +8784,13 @@ local function ConfigTabFunction()
 end
 
 task.spawn(function()
+    WindUI:Notify({Title = "Startup", Content = "Initializing script...", Duration = 2})
     task.wait(0.1)
     
     InfoTabFunction()
     PlayerTabFunction()
     MainTab()
     ShopTab()
-    ConfigTabFunction()
     TeleportTab()
     AutoTab()
     QuestTab()
@@ -8795,15 +8799,12 @@ task.spawn(function()
     DiscordTab()
     SettingTab2()
     MiscTab1()
-    PremiumTab()
-    print("[Startup] All tabs loaded, waiting 5 seconds before auto-load...")
+    ConfigTabFunction()
+    WindUI:Notify({Title = "Startup", Content = "Tabs loaded, waiting 5s for auto-load...", Duration = 3})
     task.wait(5) -- Increased delay to ensure all UI elements are registered
-    print("[Startup] Starting auto-load check...")
     local autoLoaded = LoadAutoConfig()
     if autoLoaded then
         WindUI:Notify({Title = "Config", Content = "Auto Loaded: " .. autoLoaded, Duration = 4})
-    else
-        print("[Startup] No auto-load config found or loaded")
     end
     
     -- Auto Load Position on Startup
