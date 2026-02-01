@@ -8759,29 +8759,10 @@ local function ConfigTabFunction()
         end
     })
     
-    -- Auto Load Toggle
-    local autoLoadToggle = PositionSection:Toggle({
-        Title = "Auto Load on Startup",
-        Desc = "Automatically teleport to saved position when script loads",
-        Value = false,
-        Callback = function(state)
-            writefile("FyyHub_AutoLoadPosition.txt", tostring(state))
-            WindUI:Notify({
-                Title = "Auto Load Position",
-                Content = state and "Enabled" or "Disabled",
-                Duration = 2,
-                Icon = state and "toggle-right" or "toggle-left"
-            })
-        end
+    PositionSection:Paragraph({
+        Title = "Auto-Load Info",
+        Content = "Position will automatically load on script startup if saved."
     })
-    
-    -- Load saved preference and set toggle state
-    if isfile("FyyHub_AutoLoadPosition.txt") then
-        local savedState = readfile("FyyHub_AutoLoadPosition.txt")
-        if savedState == "true" then
-            autoLoadToggle:SetValue(true)
-        end
-    end
 
 end
 
@@ -8812,9 +8793,7 @@ task.spawn(function()
     
     -- Auto Load Position on Startup (after config loads)
     task.wait(2) -- Additional wait to ensure character is fully loaded
-    if isfile("FyyHub_AutoLoadPosition.txt") then
-        local savedState = readfile("FyyHub_AutoLoadPosition.txt")
-        if savedState == "true" and isfile("FyyHub_SavedPosition.json") then
+    if isfile("FyyHub_SavedPosition.json") then
             local success, data = pcall(function()
                 return game:GetService("HttpService"):JSONDecode(readfile("FyyHub_SavedPosition.json"))
             end)
