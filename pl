@@ -8841,10 +8841,9 @@ task.spawn(function()
                     })
                 end
             end
-        end
     end
     
-    Info:Select() -- Select Tab
+    Info:Select() 
     
     WindUI:Notify({
         Title = "Fyy X Fish IT",
