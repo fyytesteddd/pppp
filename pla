@@ -8758,12 +8758,6 @@ local function ConfigTabFunction()
             LoadAndTeleportPosition()
         end
     })
-    
-    PositionSection:Paragraph({
-        Title = "Auto-Load Info",
-        Content = "Position will automatically load on script startup if saved."
-    })
-
 end
 
 task.spawn(function()
