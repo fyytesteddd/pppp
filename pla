@@ -8622,7 +8622,8 @@ local function ConfigTabFunction()
                 SetAutoLoad(name)
                 WindUI:Notify({Title = "Config", Content = "Auto Load set to: " .. name, Duration = 3})
             end
-        end    })
+        end
+    })
 
     -- Auto Save Position Feature
     ConfigTab:Space()
