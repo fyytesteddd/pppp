@@ -413,10 +413,14 @@ local function GetFishUUID()
         if fishFolder then
             fishFolder = fishFolder:FindFirstChild("client")
             if fishFolder then
+                print("[DEBUG] Fish folder found, checking children...")
+                print("[DEBUG] Selected fish:", selectedFish)
+                
                 -- If no fish selected, get first available
                 if not selectedFish or selectedFish == "Click Refresh to load fish" then
                     local fishList = fishFolder:GetChildren()
                     if #fishList > 0 then
+                        print("[DEBUG] No fish selected, returning first available")
                         return fishList[1].Name, fishList[1]
                     end
                 else
@@ -425,18 +429,28 @@ local function GetFishUUID()
                         local head = fishInstance:FindFirstChild("Head")
                         if head then
                             local children = head:GetChildren()
+                            print("[DEBUG] Fish UUID:", fishInstance.Name)
+                            print("[DEBUG] Head children count:", #children)
+                            
                             if children[2] then
                                 local fishName = children[2].Name
+                                print("[DEBUG] Fish name from Head[2]:", fishName)
                                 
                                 -- Check if this fish matches selected fish
                                 if fishName == selectedFish then
+                                    print("[DEBUG] MATCH FOUND!")
                                     return fishInstance.Name, fishInstance
                                 end
+                            else
+                                print("[DEBUG] No children[2] in Head")
                             end
+                        else
+                            print("[DEBUG] No Head found for UUID:", fishInstance.Name)
                         end
                     end
                     
                     -- Selected fish not found
+                    print("[DEBUG] Fish not found after scanning all instances")
                     return nil, nil, "Fish '" .. selectedFish .. "' not found in workspace"
                 end
             end
@@ -529,7 +543,7 @@ local autoFishToggle = autoFishSection:Toggle({
                 local notFoundCount = 0
                 
                 while autoFishRunning do
-                    local fishUUID, fishInstance = GetFishUUID()
+                    local fishUUID, fishInstance, errorMsg = GetFishUUID()
                     
                     if fishUUID and fishInstance then
                         local success, message = InstantCatch(fishUUID, fishInstance)
@@ -784,5 +798,4 @@ oxygenSection:Button({
         end
     end
 })
-
 
