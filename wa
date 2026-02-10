@@ -49,7 +49,7 @@ WindUI:AddTheme({
 
 })
 WindUI:SetTheme("amoled")
-Window:SetToggleKey(Enum.KeyCode.G)
+Window:SetToggleKey(Enum.KeyCode.R)
 
 local ConfigFolder = "FyyCommunityConfig"
 if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -305,6 +305,9 @@ end
 
 local Main = Window:Tab({Title = "Main", Icon = "play"})
 
+local Fishingsection = Main:Section({Title = "Fishing Feature", Box = true, Opened = true,  TextSize = 17})
+
+
 local fishNames = GetFishNames()
 if #fishNames == 0 then
     table.insert(fishNames, "No fish found")
@@ -314,12 +317,15 @@ local selectedFishList = {fishNames[1] or "No fish found"}
 local mappedFishUUIDs = {}
 local autoFishEnabled = false
 local tweenSpeed = 1
-local catchCount = 3
+local catchCount = 2
+
+local autoSellEnabled = false
+local sellWeight = 25 -- Default sell at 25kg
 
 local autoOxygenEnabled = false
 local savedOxygenPosition = nil
 
-local fishDropdown = Main:Dropdown({
+local fishDropdown = Fishingsection:Dropdown({
     Title = "Select Fish",
     Description = "Choose fish to auto fish",
     Options = fishNames,
@@ -444,7 +450,6 @@ local function GetClosestFishPosition(selectedFishArray)
 end
 
 local function CatchFish(uuid)
-    -- Speed Hack: Find fish instance and set Speed attribute
     local fishFolder = workspace:FindFirstChild("Game"):FindFirstChild("Fish"):FindFirstChild("client")
     if fishFolder then
         local fishInstance = fishFolder:FindFirstChild(uuid)
@@ -463,7 +468,7 @@ local function CatchFish(uuid)
                     pcall(function()
                         StartCatching:InvokeServer(uuid)
                     end)
-                    task.wait(0.01)
+                    task.wait(0.2)
                 end
             end
         end
@@ -514,6 +519,53 @@ local function GetOxygenLevel()
     return 100
 end
 
+local moveSpeed = 500 
+
+local function SafeTween(object, targetCFrame, speedParam)
+    if not object or not targetCFrame then return end
+    
+    local speed = speedParam or moveSpeed
+    local startPos = object.Position
+    local targetPos = targetCFrame.Position
+    local distance = (targetPos - startPos).Magnitude
+    
+    local TweenService = game:GetService("TweenService")
+    local segmentDistance = 50
+    if distance > segmentDistance then
+        -- Calculate segments
+        local direction = (targetPos - startPos).Unit
+        local segments = math.ceil(distance / segmentDistance)
+        
+        for i = 1, segments do
+            local currentTarget
+            if i == segments then
+                currentTarget = targetCFrame
+            else
+                currentTarget = CFrame.new(startPos + (direction * (segmentDistance * i)))
+            end
+            
+            local segmentDist = (object.Position - currentTarget.Position).Magnitude
+            local time = segmentDist / speed
+            
+            local ti = TweenInfo.new(time, Enum.EasingStyle.Linear)
+            local tween = TweenService:Create(object, ti, {CFrame = currentTarget})
+            tween:Play()
+            tween.Completed:Wait()
+            
+            if i < segments then
+                task.wait(0.01) 
+            end
+        end
+    else
+        -- Short distance, direct tween
+        local time = distance / speed
+        local ti = TweenInfo.new(time, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(object, ti, {CFrame = targetCFrame})
+        tween:Play()
+        tween.Completed:Wait()
+    end
+end
+
 local function RefillOxygen()
     local player = game.Players.LocalPlayer
     if not player or not player.Character then return end
@@ -521,23 +573,17 @@ local function RefillOxygen()
     local root = player.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    local currentPos = root.Position
-    local TweenService = game:GetService("TweenService")
+    local startPos = root.Position
     
     WindUI:Notify({Title = "Oxygen Low", Content = "Refilling oxygen...", Duration = 2})
     
     -- Tween to Safe Zone
-    local tweenInfo = TweenInfo.new(tweenSpeed)
-    local tweenToSafe = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(safeZonePosition)})
-    tweenToSafe:Play()
-    tweenToSafe.Completed:Wait()
+    SafeTween(root, CFrame.new(safeZonePosition), moveSpeed)
     
     task.wait(2) -- Wait for refill
     
     -- Tween Back
-    local tweenBack = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(currentPos)})
-    tweenBack:Play()
-    tweenBack.Completed:Wait()
+    SafeTween(root, CFrame.new(startPos), moveSpeed)
 end
 
 local function AutoFishingLoop()
@@ -565,31 +611,24 @@ local function AutoFishingLoop()
                     if player and player.Character then
                         local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
                         if humanoidRootPart then
-                            local TweenService = game:GetService("TweenService")
-                            local tweenInfo = TweenInfo.new(tweenSpeed)
                             
                             local offsetPosition = closestFish.position + Vector3.new(0, 2, 0)
-                            local tween = TweenService:Create(
-                                humanoidRootPart, 
-                                tweenInfo, 
-                                {CFrame = CFrame.new(offsetPosition)}
-                            )
-                            tween:Play()
-                            tween.Completed:Wait()
-                            
+                            SafeTween(humanoidRootPart, CFrame.new(offsetPosition), moveSpeed)
+
+                         
                             CatchFish(closestFish.uuid)
-                            task.wait(0.01)
+                            task.wait(0.35)
                             CompleteProgress()
                         end
                     end
                 end
             end
-            task.wait(0.3)
+            task.wait(1)
         end
     end
 end
 
-Main:Button({
+Fishingsection:Button({
     Title = "Refresh Fish List",
     Description = "Refresh the fish dropdown",
     Callback = function()
@@ -603,26 +642,23 @@ Main:Button({
     end
 })
 
-Main:Slider({
-    Title = "Tween Speed",
-    Desc = "Set tween speed in seconds",
-    Step = 0.5,
-    Value = {
-        Min = 0.5,
-        Max = 10,
-        Default = 2,
-    },
-    Callback = function(value)
-        tweenSpeed = value
-        WindUI:Notify({
-            Title = "Tween Speed Updated",
-            Content = "New speed: " .. value .. "s",
-            Duration = 1
-        })
+Fishingsection:Space()
+
+Fishingsection:Input({
+    Title = "Move Speed",
+    Desc = "Speed in studs/sec (Fast: 350+)",
+    Value = "500",
+    Placeholder = "500",
+    Callback = function(text)
+        local val = tonumber(text)
+        if val then
+            moveSpeed = val
+            WindUI:Notify({Title = "Speed Updated", Content = "Set to: " .. val .. " s/s", Duration = 1})
+        end
     end
 })
 
-Main:Input({
+Fishingsection:Input({
     Title = "Oxygen Threshold",
     Desc = "Refill input below this value",
     Value = "10",
@@ -636,7 +672,9 @@ Main:Input({
     end
 })
 
-Main:Toggle({
+Fishingsection:Space()
+
+Fishingsection:Toggle({
     Title = "Auto Fish",
     Desc = "Enable auto fishing loop",
     Value = false,
@@ -653,6 +691,107 @@ Main:Toggle({
             WindUI:Notify({
                 Title = "Auto Fish Stopped",
                 Content = "Farming stopped!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+
+local Sellsectiion = Main:Section({Title = "Auto Sell Feature", Box = true, Opened = true,  TextSize = 17})
+
+local function GetWeight()
+    local gui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if gui then
+        local main = gui:FindFirstChild("Main")
+        if main then
+            local rightStats = main:WaitForChild("Oxygen", 1):WaitForChild("RightStats", 1)
+            if rightStats then
+                local frame = rightStats:WaitForChild("Frame", 1)
+                if frame then
+                    local weight = frame:WaitForChild("Weight", 1)
+                    if weight then
+                        local wght = weight:FindFirstChild("Wght")
+                        if wght then
+                            -- Assuming format like "10/50" or just "10"
+                            local text = wght.Text
+                            local currentWeight = text:match("^(%d+)")
+                            return tonumber(currentWeight) or 0
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return 0
+end
+
+local autoSellEnabled = false
+local sellWeight = 25 -- Default sell at 25kg
+local SafeSell = Vector3.new(1, 4883, 73)
+local function AutoSellLoop()
+    while autoSellEnabled do
+        pcall(function()
+            local currentWeight = GetWeight()
+            
+            
+            if currentWeight >= sellWeight then
+                local player = game.Players.LocalPlayer
+                if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    SafeTween(game.Players.LocalPlayer.Character.HumanoidRootPart, CFrame.new(SafeSell), 500)
+                end
+                task.wait(0.5)
+                local SellService = game:GetService("ReplicatedStorage").common.packages.Knit.Services.SellService
+                 if SellService then
+                    local RF = SellService:FindFirstChild("RF")
+                    if RF then
+                       local SellInventory = RF:FindFirstChild("SellInventory")
+                       if SellInventory then
+                        for i = 1, 5 do
+                           SellInventory:InvokeServer()
+                        end
+                       end
+                    end
+                end
+                
+                task.wait(1)
+            end
+        end)
+        task.wait(1) 
+    end
+end
+
+Sellsectiion:Input({
+    Title = "Sell Weight",
+    Desc = "Sell when weight reaches (kg)",
+    Value = "25",
+    Placeholder = "25",
+    Callback = function(text)
+        local val = tonumber(text)
+        if val then
+            sellWeight = val
+            WindUI:Notify({Title = "Sell Config", Content = "Threshold set to: " .. val .. "kg", Duration = 2})
+        end
+    end
+})
+
+Sellsectiion:Toggle({
+    Title = "Auto Sell",
+    Desc = "Enable auto sell loop (Weight Based)",
+    Value = false,
+    Callback = function(state)
+        autoSellEnabled = state
+        if state then
+            WindUI:Notify({
+                Title = "Auto Sell Started",
+                Content = "Selling at " .. sellWeight .. "kg",
+                Duration = 2
+            })
+            task.spawn(AutoSellLoop)
+        else
+            WindUI:Notify({
+                Title = "Auto Sell Stopped",
+                Content = "Selling stopped!",
                 Duration = 2
             })
         end
