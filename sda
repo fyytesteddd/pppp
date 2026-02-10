@@ -432,9 +432,19 @@ local function GetFishUUID()
                             print("[DEBUG] Fish UUID:", fishInstance.Name)
                             print("[DEBUG] Head children count:", #children)
                             
-                            if children[2] then
-                                local fishName = children[2].Name
-                                print("[DEBUG] Fish name from Head[2]:", fishName)
+                            -- Scan all children to find fish name (not fixed index)
+                            local fishName = nil
+                            for i, child in ipairs(children) do
+                                -- Check if child name matches any fish in ReplicatedStorage
+                                if allFishData[child.Name] then
+                                    fishName = child.Name
+                                    print("[DEBUG] Found fish name at index", i, ":", fishName)
+                                    break
+                                end
+                            end
+                            
+                            if fishName then
+                                print("[DEBUG] Fish name found:", fishName)
                                 
                                 -- Check if this fish matches selected fish
                                 if fishName == selectedFish then
@@ -442,7 +452,7 @@ local function GetFishUUID()
                                     return fishInstance.Name, fishInstance
                                 end
                             else
-                                print("[DEBUG] No children[2] in Head")
+                                print("[DEBUG] No valid fish name found in Head children")
                             end
                         else
                             print("[DEBUG] No Head found for UUID:", fishInstance.Name)
