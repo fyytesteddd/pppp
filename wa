@@ -615,7 +615,7 @@ local function AutoFishingLoop()
                             local offsetPosition = closestFish.position + Vector3.new(0, 2, 0)
                             SafeTween(humanoidRootPart, CFrame.new(offsetPosition), moveSpeed)
 
-                         
+                             task.wait(0.15)
                             CatchFish(closestFish.uuid)
                             task.wait(0.45)
                             CompleteProgress()
