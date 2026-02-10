@@ -319,6 +319,10 @@ local catchCount = 3
 local autoOxygenEnabled = false
 local savedOxygenPosition = nil
 
+-- Oxygen settings
+local minOxygenLevel = 10
+local safeZonePosition = Vector3.new(1, 4883, 73)
+
 local fishDropdown = Main:Dropdown({
     Title = "Select Fish",
     Description = "Choose fish to auto fish",
@@ -334,6 +338,74 @@ local fishDropdown = Main:Dropdown({
         })
     end
 })
+
+local function GetOxygenLevel()
+    local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return 100 end
+    
+    local mainGui = playerGui:FindFirstChild("Main")
+    if not mainGui then return 100 end
+    
+    local oxygenGui = mainGui:FindFirstChild("Oxygen")
+    if not oxygenGui then return 100 end
+    
+    local canvasGroup = oxygenGui:FindFirstChild("CanvasGroup")
+    if not canvasGroup then return 100 end
+    
+    local oxygenText = canvasGroup:FindFirstChild("Oxygen")
+    if not oxygenText then return 100 end
+    
+    if oxygenText:IsA("TextLabel") or oxygenText:IsA("TextBox") then
+        local text = oxygenText.Text
+        -- Extract number from text (e.g., "Oxygen: 50%" -> 50)
+        local number = string.match(text, "(%d+)")
+        if number then
+            return tonumber(number) or 100
+        end
+    end
+    
+    return 100
+end
+
+local function GoToSafeZone()
+    local player = game.Players.LocalPlayer
+    if not player or not player.Character then return end
+    
+    local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    local TweenService = game:GetService("TweenService")
+    local tweenInfo = TweenInfo.new(2) -- 2 detik ke safe zone
+    
+    local tween = TweenService:Create(
+        humanoidRootPart, 
+        tweenInfo, 
+        {CFrame = CFrame.new(safeZonePosition)}
+    )
+    tween:Play()
+    tween.Completed:Wait()
+    
+    WindUI:Notify({
+        Title = "Oxygen Low",
+        Content = "Going to safe zone to refill oxygen",
+        Duration = 2
+    })
+    
+    -- Tunggu sampai oxygen penuh
+    while autoFishEnabled do
+        local oxygenLevel = GetOxygenLevel()
+        if oxygenLevel >= 95 then
+            WindUI:Notify({
+                Title = "Oxygen Refilled",
+                Content = "Oxygen is now full, returning to fishing",
+                Duration = 2
+            })
+            return true
+        end
+        task.wait(0.5)
+    end
+    return false
+end
 
 local function FindFishUUID(fishName)
     if not fishName or fishName == "" then
@@ -485,7 +557,7 @@ local function CompleteProgress()
                             rewards = {}
                         }
                     )
-                end)
+                )
             end
         end
     end
@@ -493,6 +565,21 @@ end
 
 local function AutoFishingLoop()
     while autoFishEnabled do
+        -- Check oxygen level before fishing
+        local oxygenLevel = GetOxygenLevel()
+        if oxygenLevel <= minOxygenLevel then
+            WindUI:Notify({
+                Title = "Low Oxygen Alert",
+                Content = "Oxygen level: " .. oxygenLevel .. "% - Going to safe zone",
+                Duration = 2
+            })
+            
+            local success = GoToSafeZone()
+            if not success then
+                break -- Jika auto fishing dimatikan saat di safe zone
+            end
+        end
+        
         if not fishDropdown or not fishDropdown.Value then
             task.wait(0.1)
         else
@@ -523,7 +610,7 @@ local function AutoFishingLoop()
                             tween.Completed:Wait()
                             
                             CatchFish(closestFish.uuid)
-                            task.wait()
+                            task.wait(0.01)
                             CompleteProgress()
                         end
                     end
@@ -567,6 +654,26 @@ Main:Slider({
     end
 })
 
+-- Add input for oxygen threshold
+Main:Slider({
+    Title = "Min Oxygen Level",
+    Desc = "Go to safe zone when oxygen reaches this level (%)",
+    Step = 5,
+    Value = {
+        Min = 5,
+        Max = 50,
+        Default = 10,
+    },
+    Callback = function(value)
+        minOxygenLevel = value
+        WindUI:Notify({
+            Title = "Oxygen Threshold Updated",
+            Content = "Will go to safe zone at " .. value .. "% oxygen",
+            Duration = 2
+        })
+    end
+})
+
 Main:Toggle({
     Title = "Auto Fish",
     Desc = "Enable auto fishing loop",
@@ -587,5 +694,14 @@ Main:Toggle({
                 Duration = 2
             })
         end
+    end
+})
+
+-- Button to manually go to safe zone
+Main:Button({
+    Title = "Go to Safe Zone",
+    Description = "Manually go to safe zone position",
+    Callback = function()
+        GoToSafeZone()
     end
 })
