@@ -1,0 +1,610 @@
+local success, Chloex = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/albibot69-lgtm/ui/refs/heads/main/LexsUiC.lua"))()
+end)
+
+-- [[ load Window ]]
+local Window = Chloex:Window({
+    Title   = "Lexs Hub | Premium | ",                --- title
+    Footer  = "Abyss",                   --- in right after title
+    Image   = "103875081318049",           ---- rbxassetid (texture)
+    Color   = Color3.fromRGB(0, 255, 255), --- colour text/ui
+    Theme   = 9542022979,                  ---- background for theme ui (rbxassetid)
+    Version = 1,                           --- version config set as default 1 if u remake / rewrite / big update and change name name in your hub change it to 2 and config will reset
+})
+
+--- [[ Notify ]]
+if Window then
+    Lexs("Window loaded!")
+end
+
+local Tabs = {
+    Info = Window:AddTab({ Name = "Info", Icon = "player" }),
+    Player = Window:AddTab({ Name = "Player", Icon = "user" }), 
+    Main = Window:AddTab({ Name = "Main", Icon = "gamepad" }),
+}
+
+v1 = Tabs.Info:AddSection("Discord", true)
+
+v1:AddParagraph({
+    Title = "Join Our Discord",
+    Content = "Join Us!",
+    Icon = "discord",
+    ButtonText = "Copy Discord Link",
+    ButtonCallback = function()
+        local link = "https://discord.gg/lexshub"
+        if setclipboard then
+            setclipboard(link)
+            Lexs("Successfully Copied!")
+        end
+    end
+})
+
+x2 = Tabs.Main:AddSection("Main")
+
+
+local fishNames = GetFishNames()
+if #fishNames == 0 then
+    table.insert(fishNames, "No fish found")
+end
+
+local selectedFishList = {fishNames[1] or "No fish found"}
+local mappedFishUUIDs = {}
+local autoFishEnabled = false
+local tweenSpeed = 1
+local catchCount = 2
+
+local autoSellEnabled = false
+local sellWeight = 25 
+
+local autoOxygenEnabled = false
+local savedOxygenPosition = nil
+
+local fishDropdown = x2:AddDropdown({
+    Title = "Select Fish",
+    Description = "Choose fish to auto fish",
+    Options = fishNames,
+    CurrentOption = selectedFishList,
+    Multi = true,
+    Callback = function(options)
+        selectedFishList = options
+        WindUI:Notify({
+            Title = "Fish Selected",
+            Content = "Selected: " .. #options .. " fish",
+            Duration = 2
+        })
+    end
+})
+
+local function FindFishUUID(fishName, ignoredTable)
+    if not fishName or fishName == "" then
+        return nil
+    end
+    
+    local fishClient = workspace:FindFirstChild("Game")
+    if not fishClient then return nil end
+    
+    fishClient = fishClient:FindFirstChild("Fish")
+    if not fishClient then return nil end
+    
+    fishClient = fishClient:FindFirstChild("client")
+    if not fishClient then return nil end
+    
+    local debugLog = "Searching for: '" .. fishName .. "'\n"
+    local foundMatches = {}
+    
+    for _, uuidFolder in pairs(fishClient:GetChildren()) do
+        local head = uuidFolder:FindFirstChild("Head")
+        if head then
+            local stats = head:FindFirstChild("stats")
+            if stats then
+                local fish = stats:FindFirstChild("Fish")
+                if fish then
+                    local fishValue = ""
+                    
+                    if fish:IsA("TextLabel") then
+                        fishValue = fish.Text
+                    elseif fish:IsA("StringValue") then
+                        fishValue = fish.Value
+                    elseif fish:IsA("ObjectValue") then
+                        local obj = fish.Value
+                        if obj then
+                            fishValue = obj.Name
+                        end
+                    end
+                    
+                    debugLog = debugLog .. "  UUID: " .. uuidFolder.Name .. " = '" .. fishValue .. "' (Type: " .. fish.ClassName .. ")\n"
+                    
+                    if fishValue == fishName then
+                         if not ignoredTable or not ignoredTable[uuidFolder.Name] then
+                            table.insert(foundMatches, uuidFolder.Name)
+                         end
+                    end
+                end
+            end
+        end
+    end
+    
+    writefile(ConfigFolder .. "/find_uuid_debug.txt", debugLog .. "\nMatches found: " .. #foundMatches)
+    
+    if #foundMatches > 0 then
+        return foundMatches[1]
+    end
+    return nil
+end
+
+local function GetClosestFishPosition(selectedFishArray, ignoredTable)
+    local player = game.Players.LocalPlayer
+    if not player or not player.Character then return nil end
+    
+    local character = player.Character
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return nil end
+    
+    local playerPosition = humanoidRootPart.Position
+    local closestFish = nil
+    local closestDistance = math.huge
+    
+    if type(selectedFishArray) == "string" then
+        selectedFishArray = {selectedFishArray}
+    end
+    
+    for _, fishName in ipairs(selectedFishArray) do
+        local uuid = FindFishUUID(fishName, ignoredTable)
+        if uuid then
+            local fishFolder = workspace:FindFirstChild("Game")
+            if fishFolder then
+                fishFolder = fishFolder:FindFirstChild("Fish")
+                if fishFolder then
+                    fishFolder = fishFolder:FindFirstChild("client")
+                    if fishFolder then
+                        local fishUUIDFolder = fishFolder:FindFirstChild(uuid)
+                        if fishUUIDFolder then
+                            local fishPosition
+                            local head = fishUUIDFolder:FindFirstChild("Head")
+                            if head then
+                                fishPosition = head.Position
+                            else
+                                fishPosition = fishUUIDFolder.Position
+                            end
+                            
+                            local distance = (playerPosition - fishPosition).Magnitude
+                            if distance < closestDistance then
+                                closestDistance = distance
+                                closestFish = {
+                                    uuid = uuid,
+                                    position = fishPosition
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestFish
+end
+
+local function CatchFish(uuid)
+    local fishFolder = workspace:FindFirstChild("Game"):FindFirstChild("Fish"):FindFirstChild("client")
+    if fishFolder then
+        local fishInstance = fishFolder:FindFirstChild(uuid)
+        if fishInstance then
+            fishInstance:SetAttribute("Speed", 99999)
+        end
+    end
+
+    local HarpoonService = game:GetService("ReplicatedStorage").common.packages.Knit.Services.HarpoonService
+    if HarpoonService then
+        local RF = HarpoonService:FindFirstChild("RF")
+        if RF then
+            local StartCatching = RF:FindFirstChild("StartCatching")
+            if StartCatching then
+                for i = 1, catchCount do
+                    pcall(function()
+                        StartCatching:InvokeServer(uuid)
+                    end)
+                    task.wait(0.2)
+                end
+            end
+        end
+    end
+end
+
+local function CompleteProgress()
+    local MinigameService = game:GetService("ReplicatedStorage").common.packages.Knit.Services.MinigameService
+    if MinigameService then
+        local RF = MinigameService:FindFirstChild("RF")
+        if RF then
+            local Update = RF:FindFirstChild("Update")
+            if Update then
+                pcall(function()
+                    Update:InvokeServer(
+                        "ProgressUpdate",
+                        {
+                            progress = 1,
+                            rewards = {}
+                        }
+                    )
+                end)
+            end
+        end
+    end
+end
+
+local oxygenThreshold = 10
+local safeZonePosition = Vector3.new(1, 4883, 73)
+
+local function GetOxygenLevel()
+    local gui = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if gui then
+        local main = gui:FindFirstChild("Main")
+        if main then
+            local oxygenFrame = main:FindFirstChild("Oxygen")
+            if oxygenFrame then
+                local canvas = oxygenFrame:FindFirstChild("CanvasGroup")
+                if canvas then
+                    local textStats = canvas:FindFirstChild("Oxygen")
+                    if textStats then
+                         return tonumber(textStats.Text) or 100
+                    end
+                end
+            end
+        end
+    end
+    return 100
+end
+
+local moveSpeed = 500 
+
+local function SafeTween(object, targetCFrame, speedParam)
+    if not object or not targetCFrame then return end
+    
+    local speed = speedParam or moveSpeed
+    local startPos = object.Position
+    local targetPos = targetCFrame.Position
+    local distance = (targetPos - startPos).Magnitude
+    
+    local TweenService = game:GetService("TweenService")
+    local segmentDistance = 50
+    if distance > segmentDistance then
+        -- Calculate segments
+        local direction = (targetPos - startPos).Unit
+        local segments = math.ceil(distance / segmentDistance)
+        
+        for i = 1, segments do
+            local currentTarget
+            if i == segments then
+                currentTarget = targetCFrame
+            else
+                currentTarget = CFrame.new(startPos + (direction * (segmentDistance * i)))
+            end
+            
+            local segmentDist = (object.Position - currentTarget.Position).Magnitude
+            local time = segmentDist / speed
+            
+            local ti = TweenInfo.new(time, Enum.EasingStyle.Linear)
+            local tween = TweenService:Create(object, ti, {CFrame = currentTarget})
+            tween:Play()
+            tween.Completed:Wait()
+            
+            if i < segments then
+                task.wait(0.01) 
+            end
+        end
+    else
+        -- Short distance, direct tween
+        local time = distance / speed
+        local ti = TweenInfo.new(time, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(object, ti, {CFrame = targetCFrame})
+        tween:Play()
+        tween.Completed:Wait()
+    end
+end
+
+local function RefillOxygen()
+    local player = game.Players.LocalPlayer
+    if not player or not player.Character then return end
+    
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    local startPos = root.Position
+    
+    WindUI:Notify({Title = "Oxygen Low", Content = "Refilling oxygen...", Duration = 2})
+    
+    -- Tween to Safe Zone
+    SafeTween(root, CFrame.new(safeZonePosition), moveSpeed)
+    
+    task.wait(2) -- Wait for refill
+    
+    -- Tween Back
+    SafeTween(root, CFrame.new(startPos), moveSpeed)
+end
+
+local fishEverythingEnabled = false
+
+local function GetClosestAnyFishPosition(ignoredTable)
+    local player = game.Players.LocalPlayer
+    if not player or not player.Character then return nil end
+    
+    local character = player.Character
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return nil end
+    
+    local fishFolder = workspace:FindFirstChild("Game")
+    if fishFolder then
+        fishFolder = fishFolder:FindFirstChild("Fish")
+        if fishFolder then
+            fishFolder = fishFolder:FindFirstChild("client")
+            if fishFolder then
+                local playerPosition = humanoidRootPart.Position
+                local closestFish = nil
+                local closestDistance = math.huge
+                local fishCount = 0
+                
+                for _, fishUUIDFolder in pairs(fishFolder:GetChildren()) do
+                    if not ignoredTable or not ignoredTable[fishUUIDFolder.Name] then
+                        local fishPosition
+                        local head = fishUUIDFolder:FindFirstChild("Head")
+                        if head then
+                            fishPosition = head.Position
+                        else
+                            -- Fallback logic
+                            if fishUUIDFolder:IsA("BasePart") then
+                                fishPosition = fishUUIDFolder.Position
+                            elseif fishUUIDFolder:IsA("Model") then
+                                fishPosition = fishUUIDFolder:GetPivot().Position
+                            end
+                        end
+                        
+                        if fishPosition then
+                            fishCount = fishCount + 1
+                            local distance = (playerPosition - fishPosition).Magnitude
+                            if distance < closestDistance then
+                                closestDistance = distance
+                                closestFish = {
+                                    uuid = fishUUIDFolder.Name,
+                                    position = fishPosition
+                                }
+                            end
+                        end
+                    end
+                end
+                
+                if not closestFish and fishCount == 0 then
+                    -- print("No fish found in client folder")
+                end
+                return closestFish
+            end
+        end
+    end
+    return nil
+end
+
+local function AutoFishingLoop()
+    local ignoredFish = {}
+    local currentFishUUID = nil
+    local fishStuckTime = 0
+
+    while autoFishEnabled do
+        local shouldFish = false
+        if fishEverythingEnabled then
+            shouldFish = true
+        elseif fishDropdown and fishDropdown.Value then
+            shouldFish = true
+        end
+        
+        if not shouldFish then
+            task.wait(0.1)
+        else
+            -- Check Oxygen First
+            local oxygen = GetOxygenLevel()
+            if oxygen <= oxygenThreshold then
+                RefillOxygen()
+            end
+
+            local closestFish = nil
+            
+            if fishEverythingEnabled then
+                closestFish = GetClosestAnyFishPosition(ignoredFish)
+            else
+                local selectedFishArray = fishDropdown.Value
+                if type(selectedFishArray) == "string" then
+                    selectedFishArray = {selectedFishArray}
+                end
+                if selectedFishArray and #selectedFishArray > 0 then
+                    closestFish = GetClosestFishPosition(selectedFishArray, ignoredFish)
+                end
+            end
+                
+            if closestFish then
+                if currentFishUUID == closestFish.uuid then
+                    if tick() - fishStuckTime > 8 then
+                        ignoredFish[closestFish.uuid] = true
+                        currentFishUUID = nil
+                        fishStuckTime = 0
+                        WindUI:Notify({
+                            Title = "Fish Stuck",
+                            Content = "Skipping stuck fish...",
+                            Duration = 2
+                        })
+                        -- Try finding next fish immediately
+                        if fishEverythingEnabled then
+                            closestFish = GetClosestAnyFishPosition(ignoredFish)
+                        else
+                             local selectedFishArray = fishDropdown.Value
+                            if type(selectedFishArray) == "string" then
+                                selectedFishArray = {selectedFishArray}
+                            end
+                            closestFish = GetClosestFishPosition(selectedFishArray, ignoredFish)
+                        end
+                    end
+                else
+                    currentFishUUID = closestFish.uuid
+                    fishStuckTime = tick()
+                end
+            else
+                currentFishUUID = nil
+                fishStuckTime = 0
+            end
+            
+            if closestFish then
+                local player = game.Players.LocalPlayer
+                if player and player.Character then
+                    local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+                    if humanoidRootPart then
+                        
+                        local offsetPosition = closestFish.position + Vector3.new(0, 2, 0)
+                        SafeTween(humanoidRootPart, CFrame.new(offsetPosition), moveSpeed)
+
+                            task.wait(0.15)
+                        CatchFish(closestFish.uuid)
+                        task.wait(0.55)
+                        CompleteProgress()
+                    end
+                end
+            else
+                -- If no fish found, return to Safe Zone
+                local player = game.Players.LocalPlayer
+                if player and player.Character then
+                    local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+                    if humanoidRootPart then
+                        SafeTween(humanoidRootPart, CFrame.new(safeZonePosition), moveSpeed)
+                    end
+                end
+            end
+
+            task.wait(0.8)
+        end
+    end
+end
+
+x2:AddButton({
+    Title = "Refresh Fish List",
+    Description = "Refresh the fish dropdown",
+    Callback = function()
+        local updatedFishNames = GetFishNames()
+        fishDropdown:Refresh(updatedFishNames)
+        WindUI:Notify({
+            Title = "Fish List Refreshed",
+            Content = "Found " .. #updatedFishNames .. " fish",
+            Duration = 2
+        })
+    end
+})
+
+
+x2:AddInput({
+    Title = "Oxygen Threshold",
+    Desc = "Refill input below this value",
+    Value = "10",
+    Placeholder = "10",
+    Callback = function(text)
+        local val = tonumber(text)
+        if val then
+            oxygenThreshold = val
+            WindUI:Notify({Title = "Oxygen Config", Content = "Threshold set to: " .. val, Duration = 2})
+        end
+    end
+})
+
+
+
+local autoClaimEnabled = false
+local function AutoClaimLoop()
+    while autoClaimEnabled do
+        pcall(function()
+            local player = game.Players.LocalPlayer
+            if player and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local closest = nil
+                    local minDst = 15
+                    
+                    for _, v in pairs(workspace:GetDescendants()) do
+                        if v:IsA("ProximityPrompt") and v.Enabled then
+                            local pos
+                            if v.Parent:IsA("BasePart") then
+                                pos = v.Parent.Position
+                            elseif v.Parent:IsA("Model") then
+                                pos = v.Parent:GetPivot().Position
+                            elseif v.Parent:IsA("Attachment") then
+                                pos = v.Parent.WorldPosition
+                            end
+                            
+                            if pos then
+                                local dst = (root.Position - pos).Magnitude
+                                if dst < minDst then
+                                    minDst = dst
+                                    closest = v
+                                end
+                            end
+                        end
+                    end
+                    
+                    if closest then
+                        fireproximityprompt(closest)
+                    end
+                end
+            end
+        end)
+        task.wait(0.1)
+    end
+end
+
+x2:AddToggle({
+    Title = "Auto Claim Fish",
+    Value = false,
+    Callback = function(state)
+        autoClaimEnabled = state
+        if state then
+            task.spawn(AutoClaimLoop)
+        end
+    end
+})
+
+
+x2:AddToggle({
+    Title = "Auto Fish Instant",
+    Desc = "Enable auto fishing loop",
+    Value = false,
+    Callback = function(state)
+        autoFishEnabled = state
+        if state then
+            WindUI:Notify({
+                Title = "Auto Fish Started",
+                Content = "Farming started!",
+                Duration = 2
+            })
+            task.spawn(AutoFishingLoop)
+        else
+            WindUI:Notify({
+                Title = "Auto Fish Stopped",
+                Content = "Farming stopped!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+x2:AddToggle({
+    Title = "Fish Everything",
+    Desc = "Target any fish (ignores selection)",
+    Value = false,
+    Callback = function(state)
+        fishEverythingEnabled = state
+        if state then
+            if not autoFishEnabled then
+                WindUI:Notify({
+                    Title = "Warning", 
+                    Content = "Please enable 'Auto Fish' to start!", 
+                    Duration = 3,
+                    Icon = "alert-triangle"
+                })
+            else
+                WindUI:Notify({Title = "Mode Changed", Content = "Fishing ALL fish...", Duration = 2})
+            end
+        end
+    end
+})
